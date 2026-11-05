@@ -1,0 +1,102 @@
+---
+title: "Bigfoot sightings in North America"
+subtitle: "Exploring reports from the Bigfoot Field Researchers Organization"
+format:
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(leaflet)
+
+bigfoot <- read_csv("data/bigfoot.csv", show_col_types = FALSE)
+```
+
+The data contains `r format(nrow(bigfoot), big.mark = ",")` reports of Bigfoot sightings submitted to the [Bigfoot Field Researchers Organization (BFRO)](https://www.bfro.net/).
+Reports are classified as:
+
+- **Class A**: clear sightings, where the witness saw the animal in good conditions;
+- **Class B**: incidents where the witness heard or saw something at a distance or in poor conditions;
+- **Class C**: second-hand reports.
+
+## Sightings over time
+
+```{r}
+#| label: fig-per-year
+#| fig-cap: "Number of reported sightings per year since 1950."
+bigfoot |>
+  filter(!is.na(date)) |>
+  mutate(year = as.integer(format(date, "%Y"))) |>
+  filter(year >= 1950) |>
+  count(year) |>
+  ggplot(aes(year, n)) +
+  geom_col(fill = "#4B7F52") +
+  labs(x = NULL, y = "Number of sightings") +
+  theme_minimal()
+```
+
+## Where are the sightings?
+
+```{r}
+#| label: tbl-states
+#| tbl-cap: "The ten states with the most reported sightings."
+bigfoot |>
+  count(state, sort = TRUE, name = "sightings") |>
+  slice_head(n = 10) |>
+  knitr::kable(col.names = c("State", "Sightings"))
+```
+
+## Seasons and report quality
+
+```{r}
+#| label: fig-season
+#| fig-cap: "Reported sightings by season and BFRO classification."
+bigfoot |>
+  filter(season != "Unknown") |>
+  mutate(season = factor(season, levels = c("Spring", "Summer", "Fall", "Winter"))) |>
+  count(season, classification) |>
+  ggplot(aes(season, n, fill = classification)) +
+  geom_col() +
+  scale_fill_manual(values = c("Class A" = "#2E4A62", "Class B" = "#8FB996", "Class C" = "#D9A441")) +
+  labs(x = NULL, y = "Number of sightings", fill = "Classification") +
+  theme_minimal()
+```
+
+## Map of sightings
+
+Sightings with coordinates, grouped into clusters. Zoom in to see individual reports and click a marker to read its title.
+
+```{r}
+#| label: fig-map
+#| fig-cap: "Location of reported Bigfoot sightings."
+sightings <- bigfoot |>
+  filter(!is.na(latitude), !is.na(longitude))
+
+palette <- colorFactor(
+  c("#2E4A62", "#8FB996", "#D9A441"),
+  domain = c("Class A", "Class B", "Class C")
+)
+
+leaflet(sightings) |>
+  addTiles() |>
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    color = ~palette(classification),
+    radius = 5,
+    stroke = FALSE,
+    fillOpacity = 0.8,
+    popup = ~paste0("<b>", title, "</b><br>", date, " (", classification, ")"),
+    clusterOptions = markerClusterOptions()
+  ) |>
+  addLegend(pal = palette, values = ~classification, title = "Classification")
+```
